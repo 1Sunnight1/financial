@@ -384,21 +384,23 @@ def create_new_month():
             # Сохраняем текущий месяц перед созданием нового
             save_data(incomes, root_expenses, root_investments, current_month)
             if copy_checkbox.value:
-                new_expenses_dict = root_expenses.to_dict(for_expense=True)
-                new_investments_dict = root_investments.to_dict(for_expense=False)
+                # Копируем детей корня расходов
+                new_expenses_dict = {}
+                for child in root_expenses.children:
+                    new_expenses_dict[child.name] = child.to_dict(for_expense=True)
+                new_investments_dict = {}
+                for child in root_investments.children:
+                    new_investments_dict[child.name] = child.to_dict(for_expense=False)
+                
                 new_root_exp = CategoryNode("__ROOT_EXPENSES__")
                 new_root_inv = CategoryNode("__ROOT_INVESTMENTS__")
                 for name, data in new_expenses_dict.items():
-                    child = CategoryNode.from_dict(name, data, for_expense=True, parent=new_root_exp)
-                    new_root_exp.add_child(child)
+                    child_node = CategoryNode.from_dict(name, data, for_expense=True, parent=new_root_exp)
+                    new_root_exp.add_child(child_node)
                 for name, data in new_investments_dict.items():
-                    child = CategoryNode.from_dict(name, data, for_expense=False, parent=new_root_inv)
-                    new_root_inv.add_child(child)
+                    child_node = CategoryNode.from_dict(name, data, for_expense=False, parent=new_root_inv)
+                    new_root_inv.add_child(child_node)
                 save_data(incomes, new_root_exp, new_root_inv, new_month)
-            else:
-                new_root_exp = CategoryNode("__ROOT_EXPENSES__")
-                new_root_inv = CategoryNode("__ROOT_INVESTMENTS__")
-                save_data(0.0, new_root_exp, new_root_inv, new_month)
             # Обновляем списки и текущий месяц
             available_months = sorted(available_months + [new_month])
             current_month = new_month
