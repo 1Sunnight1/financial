@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 import copy
 from datetime import datetime
 from operations import add_daily_expense, add_expense_category, add_investment_category, set_actual_expense
-from logger import set_logging_enabled, log
+from logger import set_logging_enabled, log, LOGGING_ENABLED
 import traceback
 
 # ---------- Глобальное состояние ----------
@@ -438,44 +438,69 @@ def delete_current_month():
             ui.button("Удалить", on_click=confirm).props("color=negative")
             ui.button("Отмена", on_click=dialog.close)
     dialog.open()
-    
+
 # ---------- Интерфейс ----------
 ui.page_title("Финансовый помощник")
+
 with ui.header(elevated=True).classes("bg-primary text-white"):
     ui.label("💰 Финансовый помощник").classes("text-h4")
-# Вторая панель: выбор месяца и создание нового
-with ui.row().classes("w-full items-center gap-2 p-2"):
-    ui.label("Месяц:").classes("text-subtitle1")
-    month_select = ui.select(available_months, value=current_month, on_change=lambda e: change_month(e.value))
-    ui.button("➕ Новый месяц", on_click=create_new_month, icon="add").props("outline")
-    ui.button("🗑️ Удалить месяц", on_click=delete_current_month, icon="delete").props("outline").props("color=negative")
 
-# Панель кнопок с иконками
-with ui.row().classes("w-full items-center gap-2 p-2"):
-    ui.button("➕ Добавить доход", on_click=show_add_incomes_dialog, icon="add").props("outline")
-    ui.button("📋 Доходы", on_click=show_incomes_dialog, icon="list").props("outline")
-    ui.button("Добавить расход", on_click=show_add_expense_dialog, icon="shopping_cart").props("outline")
-    ui.button("Записать факт", on_click=show_set_actual_dialog, icon="edit_note").props("outline")
-    ui.button("Добавить инвестицию", on_click=show_add_investment_dialog, icon="trending_up").props("outline")
-    ui.button("Обновить", on_click=refresh_ui, icon="refresh").props("flat")
-    ui.button("📊 График", on_click=show_chart_dialog, icon="bar_chart").props("outline")
-    ui.button("💾 Сохранить", on_click=manual_save, icon="save").props("outline")
-    logging_switch = ui.switch('Логирование', value=True, on_change=lambda e: set_logging_enabled(e.value))
-    logging_switch.bind_value_to(globals(), 'logging_enabled') 
+# Горизонтальные вкладки
+tabs = ui.tabs().classes('w-full')
+with tabs:
+    ui.tab('Главная', icon='home')
+    ui.tab('Графики', icon='bar_chart')
+    ui.tab('Настройки', icon='settings')
 
-# Две колонки
-with ui.row().classes("w-full"):
-    with ui.column().classes("w-1/2 q-pa-md"):
-        ui.label("📋 Расходы").classes("text-h6")
-        expenses_container = ui.column().classes("q-ml-md")
-    with ui.column().classes("w-1/2 q-pa-md"):
-        ui.label("📈 Инвестиции").classes("text-h6")
-        investments_container = ui.column().classes("q-ml-md")
+# Панели вкладок
+tab_panels = ui.tab_panels(tabs, value='Главная').classes('w-full')
 
-# Отчёт
-report_label = ui.label().classes("text-subtitle1 q-pa-md")
+# ----- Вкладка "Главная" -----
+with tab_panels:
+    with ui.tab_panel('Главная'):
+        # Строка выбора месяца
+        with ui.row().classes("w-full items-center gap-2 p-2"):
+            ui.label("Месяц:").classes("text-subtitle1")
+            month_select = ui.select(available_months, value=current_month, on_change=lambda e: change_month(e.value))
+            ui.button("➕ Новый месяц", on_click=create_new_month, icon="add").props("outline")
+            ui.button("🗑️ Удалить месяц", on_click=delete_current_month, icon="delete").props("outline").props("color=negative")
 
-# Загрузка данных
-init_data()
+        # Панель кнопок действий
+        with ui.row().classes("w-full items-center gap-2 p-2"):
+            ui.button("➕ Добавить доход", on_click=show_add_incomes_dialog, icon="add").props("outline")
+            ui.button("📋 Доходы", on_click=show_incomes_dialog, icon="list").props("outline")
+            ui.button("Добавить расход", on_click=show_add_expense_dialog, icon="shopping_cart").props("outline")
+            ui.button("Записать факт", on_click=show_set_actual_dialog, icon="edit_note").props("outline")
+            ui.button("Добавить инвестицию", on_click=show_add_investment_dialog, icon="trending_up").props("outline")
+            ui.button("Обновить", on_click=refresh_ui, icon="refresh").props("flat")
+            ui.button("💾 Сохранить", on_click=manual_save, icon="save").props("outline")
 
+        # Две колонки: расходы и инвестиции
+        with ui.row().classes("w-full"):
+            with ui.column().classes("w-1/2 q-pa-md"):
+                ui.label("📋 Расходы").classes("text-h6")
+                expenses_container = ui.column().classes("q-ml-md")
+            with ui.column().classes("w-1/2 q-pa-md"):
+                ui.label("📈 Инвестиции").classes("text-h6")
+                investments_container = ui.column().classes("q-ml-md")
+
+        # Отчёт
+        report_label = ui.label().classes("text-subtitle1 q-pa-md")
+
+        # Инициализация данных (вызывается один раз)
+        init_data()
+
+    # ----- Вкладка "Графики" -----
+    with ui.tab_panel('Графики'):
+        ui.label("📊 Аналитика и графики").classes("text-h6 q-pa-md")
+        ui.button("Показать график расходов", on_click=show_chart_dialog, icon="bar_chart")
+
+    # ----- Вкладка "Настройки" -----
+    with ui.tab_panel('Настройки'):
+        ui.label("⚙️ Настройки приложения").classes("text-h6 q-pa-md")
+        from logger import LOGGING_ENABLED, set_logging_enabled
+        ui.switch('Логирование (запись в файл)', value=LOGGING_ENABLED, on_change=lambda e: set_logging_enabled(e.value))
+        ui.label("Логи сохраняются в папке logs/").classes("text-caption")
+
+# Запуск
 ui.run(host="127.0.0.1", port=8080, title="Финансовый помощник", reload=False)
