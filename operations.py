@@ -44,3 +44,19 @@ def add_daily_expense(path_parts, date, amount, root):
     else:
         node.daily[date] = amount
     return node
+
+# Добавление дохода
+def add_income(incomes_dict, date, amount):
+    if date in incomes_dict:
+        incomes_dict[date] += amount
+    else:
+        incomes_dict[date] = amount
+    return incomes_dict
+
+def delete_income(incomes_dict, date):
+    if date in incomes_dict:
+        del incomes_dict[date]
+    return incomes_dict
+
+def total_income(incomes_dict):
+    return sum(incomes_dict.values())

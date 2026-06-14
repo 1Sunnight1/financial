@@ -1,27 +1,24 @@
-# storage.py
+# storage.py (добавьте или замените соответствующие части)
+
 import json
 import os
 from datetime import datetime
-from logger import log
 from models import CategoryNode
+from logger import log
 
 DATA_DIR = "data"
 DATA_FILE = os.path.join(DATA_DIR, "finance_data.json")
 
 def get_current_month():
-    """Возвращает текущий месяц в формате YYYY-MM"""
     return datetime.now().strftime("%Y-%m")
 
 def save_data(income, root_expenses, root_investments, month=None):
-    """Сохраняет данные за указанный месяц (по умолчанию текущий)"""
-    log(f"save_data вход: month={month}, income={income}")
+    # NOTE: параметр income пока оставлен для совместимости, но будет заменён на incomes_dict
     if month is None:
         month = get_current_month()
-    log(f"save_data вход: month={month}, income={income}")
     os.makedirs(DATA_DIR, exist_ok=True)
-    log(f"save_data: данные записаны в {DATA_FILE}") 
 
-    # Загружаем существующие данные, если файл есть
+    # Загружаем существующие данные (если есть)
     if os.path.exists(DATA_FILE):
         try:
             with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -35,7 +32,7 @@ def save_data(income, root_expenses, root_investments, month=None):
     else:
         data = {"months": {}, "current_month": month}
 
-    # Сохраняем деревья в словари
+    # Сохраняем деревья расходов и инвестиций
     expenses_dict = {}
     for child in root_expenses.children:
         expenses_dict[child.name] = child.to_dict(for_expense=True)
@@ -43,45 +40,58 @@ def save_data(income, root_expenses, root_investments, month=None):
     for child in root_investments.children:
         investments_dict[child.name] = child.to_dict(for_expense=False)
 
-    # Обновляем данные за указанный месяц
-    data["months"][month] = {
-        "income": income,
-        "expenses": expenses_dict,
-        "investments": investments_dict
-    }
+    # Подготовка данных за указанный месяц
+    if month not in data["months"]:
+        data["months"][month] = {}
+    month_data = data["months"][month]
+    # Сохраняем incomes (если пришёл словарь) или совместимость (если income - число)
+    if isinstance(income, dict):
+        month_data["incomes"] = income
+    elif isinstance(income, (int, float)):
+        # Старый формат, конвертируем в транзакцию на первое число месяца
+        first_day = f"{month}-01"
+        month_data["incomes"] = {first_day: income}
+    else:
+        # Если income не задан, оставляем как есть или пустой словарь
+        if "incomes" not in month_data:
+            month_data["incomes"] = {}
+    month_data["expenses"] = expenses_dict
+    month_data["investments"] = investments_dict
     data["current_month"] = month
 
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+    log(f"save_data: данные записаны для месяца {month}", level="INFO")
 
 def load_data(month=None):
-    """Загружает данные за указанный месяц (по умолчанию текущий). Возвращает (income, root_expenses, root_investments)"""
     root_exp = CategoryNode("__ROOT_EXPENSES__")
     root_inv = CategoryNode("__ROOT_INVESTMENTS__")
 
     if not os.path.exists(DATA_FILE):
-        return 0.0, root_exp, root_inv, get_current_month(), []
+        # Возвращаем пустой словарь incomes, месяц и пустые деревья
+        return {}, root_exp, root_inv, get_current_month(), []
 
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             content = f.read().strip()
             if not content:
-                return 0.0, root_exp, root_inv, get_current_month(), []
+                return {}, root_exp, root_inv, get_current_month(), []
             data = json.loads(content)
     except json.JSONDecodeError:
-        return 0.0, root_exp, root_inv, get_current_month(), []
+        return {}, root_exp, root_inv, get_current_month(), []
 
-    # Проверка: старый формат (без months) -> конвертируем
+    # Конвертация старого формата (без months) -> новый
     if "months" not in data:
-        # Конвертация старого формата
+        # Старый формат: поле monthly_income, expenses, investments
         old_income = data.get("monthly_income", 0.0)
         old_expenses = data.get("expenses", {})
         old_investments = data.get("investments", {})
         current_month = get_current_month()
         data = {"months": {}, "current_month": current_month}
-        # Сохраняем как данные за текущий месяц
+        # Создаём транзакцию дохода на первое число текущего месяца
+        first_day = f"{current_month}-01"
         data["months"][current_month] = {
-            "income": old_income,
+            "incomes": {first_day: old_income},
             "expenses": old_expenses,
             "investments": old_investments
         }
@@ -92,17 +102,22 @@ def load_data(month=None):
     if month is None:
         month = data.get("current_month", get_current_month())
 
-    # Получаем список доступных месяцев
     available_months = sorted(data.get("months", {}).keys())
-
-    # Если запрошенный месяц отсутствует, создаём пустые данные для него
     if month not in data["months"]:
-        return 0.0, root_exp, root_inv, month, available_months
+        # Возвращаем пустой словарь incomes, пустые деревья
+        return {}, root_exp, root_inv, month, available_months
 
     month_data = data["months"][month]
-    income = month_data.get("income", 0.0)
+    # Извлекаем incomes (словарь дата->сумма)
+    incomes = month_data.get("incomes", {})
+    # Если есть старое поле income (число) и нет incomes, конвертируем
+    if "income" in month_data and not incomes:
+        first_day = f"{month}-01"
+        incomes = {first_day: month_data["income"]}
+        # и сохраняем обратно (не обязательно, но можно)
+        month_data["incomes"] = incomes
 
-    # Восстанавливаем деревья
+    # Восстанавливаем деревья расходов и инвестиций
     exp_data = month_data.get("expenses", {})
     for child_name, child_data in exp_data.items():
         if isinstance(child_data, dict):
@@ -114,29 +129,4 @@ def load_data(month=None):
             child_node = CategoryNode.from_dict(child_name, child_data, for_expense=False, parent=root_inv)
             root_inv.add_child(child_node)
 
-    return income, root_exp, root_inv, month, available_months
-
-def get_available_months():
-    """Возвращает список доступных месяцев (отсортированный)"""
-    if not os.path.exists(DATA_FILE):
-        return []
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        months = data.get("months", {}).keys()
-        return sorted(months)
-    except:
-        return []
-
-def set_current_month(month):
-    """Устанавливает текущий месяц в файле (без загрузки данных)"""
-    if not os.path.exists(DATA_FILE):
-        return
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        data["current_month"] = month
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except:
-        pass
+    return incomes, root_exp, root_inv, month, available_months
