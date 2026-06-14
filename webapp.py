@@ -24,6 +24,28 @@ investments_container = None
 report_label = None
 month_select = None
 
+def get_all_expense_paths():
+    """Возвращает список всех путей категорий расходов (например, ['Еда', 'Еда/Мясо', 'Транспорт'])"""
+    paths = []
+    def walk(node, current):
+        for child in node.children:
+            new_path = current + [child.name]
+            paths.append('/'.join(new_path))
+            walk(child, new_path)
+    walk(root_expenses, [])
+    return sorted(paths)
+
+def get_all_investment_paths():
+    """Аналогично для инвестиций"""
+    paths = []
+    def walk(node, current):
+        for child in node.children:
+            new_path = current + [child.name]
+            paths.append('/'.join(new_path))
+            walk(child, new_path)
+    walk(root_investments, [])
+    return sorted(paths)
+
 # ---------- Вспомогательные функции ----------
 def refresh_ui():
     """Полностью перестраивает деревья и отчёт"""
@@ -167,7 +189,7 @@ def show_quick_edit_dialog(category, is_expense=True):
 def show_add_expense_dialog():
     with ui.dialog() as dialog, ui.card():
         ui.label("➕ Добавить категорию расходов")
-        path_input = ui.input("Путь (через слэш)", placeholder="Еда/Рестораны/Обеды")
+        path_input = ui.input("Путь (через слэш)", placeholder="Еда/Рестораны/Обеды", autocomplete=get_all_expense_paths())
         forecast_input = ui.number("Прогноз", value=0.0, step=100)
         with ui.row():
             def add():
@@ -189,7 +211,7 @@ def show_add_expense_dialog():
 def show_add_investment_dialog():
     with ui.dialog() as dialog, ui.card():
         ui.label("➕ Добавить инвестицию")
-        path_input = ui.input("Путь (через слэш)", placeholder="Акции/Российские")
+        path_input = ui.input("Путь (через слэш)", placeholder="Акции/Российские", autocomplete=get_all_investment_paths())
         amount_input = ui.number("Сумма", value=0.0, step=1000)
         def add():
             path_str = path_input.value.strip()
@@ -210,7 +232,7 @@ def show_add_investment_dialog():
 def show_set_actual_dialog():
     with ui.dialog() as dialog, ui.card():
         ui.label("📝 Записать фактический расход")
-        path_input = ui.input("Путь к категории", placeholder="Еда/Рестораны")
+        path_input = ui.input("Путь к категории", placeholder="Еда/Рестораны", autocomplete=get_all_expense_paths())
         ui.label("Дата")
         date_input = ui.date(value=datetime.now().strftime("%Y-%m-%d"))
         actual_input = ui.number("Сумма", value=0.0, step=100)
@@ -369,12 +391,12 @@ def change_month(month):
 def create_new_month():
     with ui.dialog() as dialog, ui.card():
         ui.label("Новый месяц")
-        new_month_input = ui.input("Месяц (YYYY-MM)", placeholder="2025-02")
+        new_month_input = ui.date(value=datetime.now().strftime("%Y-%m"), type='month', label="Месяц")
         copy_checkbox = ui.checkbox("Скопировать данные из текущего месяца")
         def confirm():
             # Объявляем global в самом начале
             global available_months, current_month, incomes, root_expenses, root_investments
-            new_month = new_month_input.value.strip()
+            new_month = new_month_input.value  # уже строка в формате YYYY-MM
             if not new_month or len(new_month) != 7 or new_month[4] != '-':
                 ui.notify("Неверный формат. Используйте ГГГГ-ММ", type="warning")
                 return
