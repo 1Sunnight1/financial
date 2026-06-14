@@ -1,0 +1,56 @@
+# Системные файлы и папки
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+._*
+
+# Временные файлы и результаты сборки
+*.log
+*.swp
+*.swo
+*.tmp
+temp/
+tmp/
+out/
+build/
+dist/
+
+# Зависимости
+node_modules/
+bower_components/
+vendor/
+packages/
+
+# Настройки среды разработки (IDE)
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.suo
+*.ntvs*
+*.njsproj
+*.pyproj
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+.project
+.classpath
+
+# Виртуальные окружения
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Базы данных (локальные)
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+
+#рабочие файлы
+data/

@@ -1,0 +1,32 @@
+# operations.py
+from models import CategoryNode
+
+def add_expense_category(path_parts, forecast, root):
+    node = root
+    for part in path_parts:
+        child = node.find_child(part)
+        if child is None:
+            child = CategoryNode(part, parent=node)
+            node.add_child(child)
+        node = child
+    node.forecast = forecast
+    return node
+
+def set_actual_expense(path_parts, actual, root):
+    node = root
+    for part in path_parts:
+        node = node.find_child(part)
+        if node is None:
+            raise ValueError(f"Категория {part} не найдена в {'/'.join(path_parts)}")
+    node.actual = actual
+
+def add_investment_category(path_parts, amount, root):
+    node = root
+    for part in path_parts:
+        child = node.find_child(part)
+        if child is None:
+            child = CategoryNode(part, parent=node)
+            node.add_child(child)
+        node = child
+    node.amount = amount
+    return node
