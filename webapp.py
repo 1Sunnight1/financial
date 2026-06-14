@@ -2,7 +2,7 @@
 from nicegui import ui, app
 import matplotlib.pyplot as plt
 from nicegui import ui, app
-from storage import load_data, save_data
+from storage import load_data, save_data, delete_month
 from models import CategoryNode
 import plotly.graph_objects as go
 import copy
@@ -414,6 +414,31 @@ def create_new_month():
         ui.button("Отмена", on_click=dialog.close)
     dialog.open()
 
+#удаление месяцев
+def delete_current_month():
+    global incomes, root_expenses, root_investments, current_month, available_months
+    if not current_month:
+        ui.notify("Нет текущего месяца для удаления", type="warning")
+        return
+    with ui.dialog() as dialog, ui.card():
+        ui.label(f"Удалить месяц {current_month}?")
+        ui.label("Все данные за этот месяц будут удалены.").classes("text-caption")
+        with ui.row():
+            def confirm(month=current_month):
+                success = delete_month(month)
+                if success:
+                    global incomes, root_expenses, root_investments, current_month, available_months
+                    incomes, root_expenses, root_investments, current_month, available_months = load_data()
+                    update_month_selector()
+                    refresh_ui()
+                    ui.notify(f"Месяц {month} удалён", type="positive")
+                else:
+                    ui.notify("Не удалось удалить месяц", type="negative")
+                dialog.close()
+            ui.button("Удалить", on_click=confirm).props("color=negative")
+            ui.button("Отмена", on_click=dialog.close)
+    dialog.open()
+    
 # ---------- Интерфейс ----------
 ui.page_title("Финансовый помощник")
 with ui.header(elevated=True).classes("bg-primary text-white"):
@@ -423,6 +448,7 @@ with ui.row().classes("w-full items-center gap-2 p-2"):
     ui.label("Месяц:").classes("text-subtitle1")
     month_select = ui.select(available_months, value=current_month, on_change=lambda e: change_month(e.value))
     ui.button("➕ Новый месяц", on_click=create_new_month, icon="add").props("outline")
+    ui.button("🗑️ Удалить месяц", on_click=delete_current_month, icon="delete").props("outline").props("color=negative")
 
 # Панель кнопок с иконками
 with ui.row().classes("w-full items-center gap-2 p-2"):
