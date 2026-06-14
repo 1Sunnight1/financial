@@ -3,19 +3,26 @@ from nicegui import ui, app
 import matplotlib.pyplot as plt
 from nicegui import ui, app
 from storage import load_data, save_data
-from operations import add_expense_category, add_investment_category, set_actual_expense
 from models import CategoryNode
 import plotly.graph_objects as go
+import copy
+from datetime import datetime
+from operations import add_daily_expense, add_expense_category, add_investment_category, set_actual_expense
+from logger import set_logging_enabled, log
+import traceback
 
 # ---------- Глобальное состояние ----------
 income = 0.0
 root_expenses = None
 root_investments = None
+current_month = None
+available_months = []
 
 # Контейнеры
 expenses_container = None
 investments_container = None
 report_label = None
+month_select = None
 
 # ---------- Вспомогательные функции ----------
 def refresh_ui():
@@ -70,6 +77,7 @@ def edit_forecast_dialog(category):
         def save():
             category.forecast = forecast_input.value
             refresh_ui()
+            manual_save()   
             dialog.close()
             ui.notify(f"Прогноз для {category.name} обновлён", type="positive")
         ui.button("Сохранить", on_click=save)
@@ -83,6 +91,7 @@ def edit_actual_dialog(category):
         def save():
             category.actual = actual_input.value
             refresh_ui()
+            manual_save()   
             dialog.close()
             ui.notify(f"Факт для {category.name} обновлён", type="positive")
         ui.button("Сохранить", on_click=save)
@@ -96,6 +105,7 @@ def edit_investment_amount_dialog(category):
         def save():
             category.amount = amount_input.value
             refresh_ui()
+            manual_save()
             dialog.close()
             ui.notify(f"Сумма для {category.name} обновлена", type="positive")
         ui.button("Сохранить", on_click=save)
@@ -111,6 +121,7 @@ def confirm_delete_category(category, is_expense=True):
             if parent:
                 parent.children.remove(category)
             refresh_ui()
+            manual_save()
             dialog.close()
             ui.notify(f"Категория '{category.name}' удалена", type="warning")
         ui.button("Удалить", on_click=delete).props("color=negative")
@@ -118,31 +129,40 @@ def confirm_delete_category(category, is_expense=True):
     dialog.open()
 
 def show_quick_edit_dialog(category, is_expense=True):
-    """Быстрое редактирование: для расходов - прогноз и факт, для инвестиций - сумма"""
-    with ui.dialog() as dialog, ui.card():
-        ui.label(f"Редактирование: {category.name}")
+    with ui.dialog() as dialog, ui.card().style("width: 500px"):
+        ui.label(f"Редактирование: {category.name}").classes("text-h6")
         if is_expense:
             forecast_val = category.forecast if category.forecast is not None else 0.0
-            actual_val = category.actual if category.actual is not None else 0.0
+            actual_val = category.total_actual()
             forecast_input = ui.number("Прогноз", value=forecast_val, step=100)
-            actual_input = ui.number("Факт", value=actual_val, step=100)
+            # Отображение дневных записей
+            if category.daily:
+                ui.label("Ежедневные записи:").classes("text-subtitle1")
+                daily_list = ui.column()
+                for date_str, amt in sorted(category.daily.items()):
+                    with daily_list:
+                        ui.label(f"{date_str}: {amt:.2f}").classes("text-caption")
+            else:
+                ui.label("Нет дневных записей").classes("text-caption")
             def save():
                 category.forecast = forecast_input.value
-                category.actual = actual_input.value
                 refresh_ui()
+                manual_save()
                 dialog.close()
-                ui.notify("Данные обновлены", type="positive")
+                ui.notify("Прогноз обновлён", type="positive")
+            ui.button("Сохранить прогноз", on_click=save)
         else:
             amount_input = ui.number("Сумма", value=category.amount, step=1000)
             def save():
                 category.amount = amount_input.value
                 refresh_ui()
+                manual_save()
                 dialog.close()
                 ui.notify("Сумма обновлена", type="positive")
-        ui.button("Сохранить", on_click=save)
-        ui.button("Отмена", on_click=dialog.close)
+            ui.button("Сохранить", on_click=save)
+        ui.button("Закрыть", on_click=dialog.close)
     dialog.open()
-
+    
 # ---------- Диалоги добавления (улучшенные) ----------
 def show_add_expense_dialog():
     with ui.dialog() as dialog, ui.card():
@@ -159,6 +179,7 @@ def show_add_expense_dialog():
                 forecast = forecast_input.value
                 add_expense_category(path, forecast, root_expenses)
                 refresh_ui()
+                manual_save()
                 dialog.close()
                 ui.notify(f"✅ Категория '{path_str}' добавлена", type="positive")
             ui.button("Добавить", on_click=add, icon="add")
@@ -179,6 +200,7 @@ def show_add_investment_dialog():
             amount = amount_input.value
             add_investment_category(path, amount, root_investments)
             refresh_ui()
+            manual_save()
             dialog.close()
             ui.notify(f"✅ Инвестиция '{path_str}' добавлена", type="positive")
         ui.button("Добавить", on_click=add, icon="add")
@@ -189,6 +211,8 @@ def show_set_actual_dialog():
     with ui.dialog() as dialog, ui.card():
         ui.label("📝 Записать фактический расход")
         path_input = ui.input("Путь к категории", placeholder="Еда/Рестораны")
+        ui.label("Дата")
+        date_input = ui.date(value=datetime.now().strftime("%Y-%m-%d"))
         actual_input = ui.number("Сумма", value=0.0, step=100)
         def set_act():
             path_str = path_input.value.strip()
@@ -196,12 +220,14 @@ def show_set_actual_dialog():
                 ui.notify("Введите путь", type="warning")
                 return
             path = [p.strip() for p in path_str.split('/') if p.strip()]
-            actual = actual_input.value
+            amount = actual_input.value
+            date_str = date_input.value
             try:
-                set_actual_expense(path, actual, root_expenses)
+                add_daily_expense(path, date_str, amount, root_expenses)
                 refresh_ui()
+                manual_save()
                 dialog.close()
-                ui.notify(f"✅ Факт {actual} для '{path_str}' установлен", type="positive")
+                ui.notify(f"✅ Запись {amount} за {date_str} добавлена", type="positive")
             except ValueError as e:
                 ui.notify(str(e), type="negative")
         ui.button("Записать", on_click=set_act, icon="edit")
@@ -216,6 +242,7 @@ def show_set_income_dialog():
             global income
             income = income_input.value
             refresh_ui()
+            manual_save()
             dialog.close()
             ui.notify(f"Доход установлен: {income:.2f}", type="positive")
         ui.button("Сохранить", on_click=set_inc, icon="save")
@@ -273,20 +300,107 @@ def update_report():
 """
     report_label.set_text(report_text)
 
+def manual_save():
+    total_forecast = root_expenses.total_forecast()
+    total_actual = root_expenses.total_actual()
+    log(f"manual_save: month={current_month}, income={income}, forecast={total_forecast}, actual={total_actual}", level="INFO")
+    # Если данные нулевые, покажем стек вызовов
+    if income == 0.0 and total_forecast == 0.0 and total_actual == 0.0:
+        stack = traceback.format_stack()
+        log("manual_save вызвана с нулевыми данными, стек вызовов:\n" + "".join(stack), level="WARNING")
+    save_data(income, root_expenses, root_investments, current_month)
+    ui.notify("Данные сохранены", type="positive")
+
 def init_data():
-    global income, root_expenses, root_investments
-    income, root_expenses, root_investments = load_data()
+    global income, root_expenses, root_investments, current_month, available_months
+    income, root_expenses, root_investments, current_month, available_months = load_data()
+    # Обновляем выпадающий список
+    update_month_selector()
     refresh_ui()
+
+def update_month_selector():
+    """Обновляет значения в выпадающем списке месяцев"""
+    global month_select, available_months, current_month
+    if month_select:
+        month_select.options = available_months
+        if current_month in available_months:
+            month_select.value = current_month
+        else:
+            month_select.value = None
+
+def change_month(month):
+    """Загружает данные за выбранный месяц"""
+    global income, root_expenses, root_investments, current_month
+    if not month or month == current_month:
+        return
+    # Сохраняем текущие данные перед переключением
+    save_data(income, root_expenses, root_investments, current_month)
+    # Загружаем новый месяц
+    income, root_expenses, root_investments, current_month, _ = load_data(month)
+    refresh_ui()
+    manual_save()
+    ui.notify(f"Загружен месяц {month}", type="info")            
+
+def create_new_month():
+    with ui.dialog() as dialog, ui.card():
+        ui.label("Новый месяц")
+        new_month_input = ui.input("Месяц (YYYY-MM)", placeholder="2025-02")
+        copy_checkbox = ui.checkbox("Скопировать данные из текущего месяца")
+        def confirm():
+            # Объявляем global в самом начале
+            global available_months, current_month, income, root_expenses, root_investments
+            new_month = new_month_input.value.strip()
+            if not new_month or len(new_month) != 7 or new_month[4] != '-':
+                ui.notify("Неверный формат. Используйте ГГГГ-ММ", type="warning")
+                return
+            if new_month in available_months:
+                ui.notify("Месяц уже существует", type="warning")
+                return
+            # Сохраняем текущий месяц перед созданием нового
+            save_data(income, root_expenses, root_investments, current_month)
+            if copy_checkbox.value:
+                new_expenses_dict = root_expenses.to_dict(for_expense=True)
+                new_investments_dict = root_investments.to_dict(for_expense=False)
+                new_root_exp = CategoryNode("__ROOT_EXPENSES__")
+                new_root_inv = CategoryNode("__ROOT_INVESTMENTS__")
+                for name, data in new_expenses_dict.items():
+                    child = CategoryNode.from_dict(name, data, for_expense=True, parent=new_root_exp)
+                    new_root_exp.add_child(child)
+                for name, data in new_investments_dict.items():
+                    child = CategoryNode.from_dict(name, data, for_expense=False, parent=new_root_inv)
+                    new_root_inv.add_child(child)
+                save_data(income, new_root_exp, new_root_inv, new_month)
+            else:
+                new_root_exp = CategoryNode("__ROOT_EXPENSES__")
+                new_root_inv = CategoryNode("__ROOT_INVESTMENTS__")
+                save_data(0.0, new_root_exp, new_root_inv, new_month)
+            # Обновляем списки и текущий месяц
+            available_months = sorted(available_months + [new_month])
+            current_month = new_month
+            income, root_expenses, root_investments, _, _ = load_data(new_month)
+            update_month_selector()
+            refresh_ui()
+            manual_save()
+            dialog.close()
+            ui.notify(f"Создан месяц {new_month}", type="positive")
+        ui.button("Создать", on_click=confirm)
+        ui.button("Отмена", on_click=dialog.close)
+    dialog.open()
 
 @app.on_shutdown
 def shutdown():
-    save_data(income, root_expenses, root_investments)
     print("Данные сохранены.")
+
 
 # ---------- Интерфейс ----------
 ui.page_title("Финансовый помощник")
 with ui.header(elevated=True).classes("bg-primary text-white"):
     ui.label("💰 Финансовый помощник").classes("text-h4")
+# Вторая панель: выбор месяца и создание нового
+with ui.row().classes("w-full items-center gap-2 p-2"):
+    ui.label("Месяц:").classes("text-subtitle1")
+    month_select = ui.select(available_months, value=current_month, on_change=lambda e: change_month(e.value))
+    ui.button("➕ Новый месяц", on_click=create_new_month, icon="add").props("outline")
 
 # Панель кнопок с иконками
 with ui.row().classes("w-full items-center gap-2 p-2"):
@@ -296,6 +410,9 @@ with ui.row().classes("w-full items-center gap-2 p-2"):
     ui.button("Добавить инвестицию", on_click=show_add_investment_dialog, icon="trending_up").props("outline")
     ui.button("Обновить", on_click=refresh_ui, icon="refresh").props("flat")
     ui.button("📊 График", on_click=show_chart_dialog, icon="bar_chart").props("outline")
+    ui.button("💾 Сохранить", on_click=manual_save, icon="save").props("outline")
+    logging_switch = ui.switch('Логирование', value=True, on_change=lambda e: set_logging_enabled(e.value))
+    logging_switch.bind_value_to(globals(), 'logging_enabled') 
 
 # Две колонки
 with ui.row().classes("w-full"):

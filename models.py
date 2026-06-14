@@ -6,8 +6,9 @@ class CategoryNode:
         self.parent = parent
         self.children = []
         self.forecast = None   # None = нет явного значения, вычислять из детей
-        self.actual = None     # None = нет явного значения, вычислять из детей
+        self.actual = None     # для совместимости (если daily пуст)
         self.amount = 0.0      # для инвестиций
+        self.daily = {}        # { "YYYY-MM-DD": сумма }
 
     def add_child(self, child_node):
         child_node.parent = self
@@ -37,8 +38,13 @@ class CategoryNode:
         return total
 
     def total_actual(self):
+        # Если есть дневные записи, суммируем их
+        if self.daily:
+            return sum(self.daily.values())
+        # Иначе используем старое поле actual (для совместимости)
         if self.actual is not None:
             return self.actual
+        # Если ничего нет, вычисляем сумму детей
         total = 0.0
         for child in self.children:
             total += child.total_actual()
@@ -59,6 +65,8 @@ class CategoryNode:
                 result["forecast"] = self.forecast
             if self.actual is not None:
                 result["actual"] = self.actual
+            if self.daily:
+                result["daily"] = self.daily
         else:
             if self.amount != 0.0:
                 result["amount"] = self.amount
@@ -76,6 +84,8 @@ class CategoryNode:
                 node.forecast = data["forecast"]
             if "actual" in data:
                 node.actual = data["actual"]
+            if "daily" in data:
+                node.daily = data["daily"]
         else:
             if "amount" in data:
                 node.amount = data["amount"]

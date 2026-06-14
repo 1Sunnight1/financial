@@ -30,3 +30,17 @@ def add_investment_category(path_parts, amount, root):
         node = child
     node.amount = amount
     return node
+
+def add_daily_expense(path_parts, date, amount, root):
+    """Добавляет ежедневную запись расхода. date в формате 'YYYY-MM-DD'"""
+    node = root
+    for part in path_parts:
+        node = node.find_child(part)
+        if node is None:
+            raise ValueError(f"Категория {part} не найдена в {'/'.join(path_parts)}")
+    # Если узел - листовой или любой, добавляем запись
+    if date in node.daily:
+        node.daily[date] += amount
+    else:
+        node.daily[date] = amount
+    return node
