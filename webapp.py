@@ -1,8 +1,11 @@
 # webapp.py
 from nicegui import ui, app
+import matplotlib.pyplot as plt
+from nicegui import ui, app
 from storage import load_data, save_data
 from operations import add_expense_category, add_investment_category, set_actual_expense
 from models import CategoryNode
+import plotly.graph_objects as go
 
 # ---------- Глобальное состояние ----------
 income = 0.0
@@ -219,6 +222,42 @@ def show_set_income_dialog():
         ui.button("Отмена", on_click=dialog.close, icon="close")
     dialog.open()
 
+# ---------- График ----------
+def show_chart_dialog():
+    """Показывает интерактивный график сравнения прогноза и факта по расходам"""
+    # Собираем данные по прямым детям root_expenses
+    categories = []
+    forecasts = []
+    actuals = []
+    for child in root_expenses.children:
+        categories.append(child.name)
+        forecasts.append(child.total_forecast())
+        actuals.append(child.total_actual())
+    if not categories:
+        ui.notify("Нет категорий расходов для отображения графика", type="warning")
+        return
+
+    # Создаём фигуру Plotly
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=categories, y=forecasts, name='Прогноз', marker_color='skyblue'))
+    fig.add_trace(go.Bar(x=categories, y=actuals, name='Факт', marker_color='lightcoral'))
+
+    fig.update_layout(
+        title='Сравнение прогноза и факта по категориям расходов',
+        xaxis_title='Категории',
+        yaxis_title='Сумма',
+        barmode='group',
+        template='plotly_white',
+        height=500
+    )
+
+    # Показываем в диалоге
+    with ui.dialog() as dialog, ui.card().style("width: 900px"):
+        ui.label("📊 График расходов").classes("text-h6")
+        ui.plotly(fig).classes("w-full")
+        ui.button("Закрыть", on_click=dialog.close)
+    dialog.open()
+
 def update_report():
     total_forecast = root_expenses.total_forecast()
     total_actual = root_expenses.total_actual()
@@ -256,6 +295,7 @@ with ui.row().classes("w-full items-center gap-2 p-2"):
     ui.button("Записать факт", on_click=show_set_actual_dialog, icon="edit_note").props("outline")
     ui.button("Добавить инвестицию", on_click=show_add_investment_dialog, icon="trending_up").props("outline")
     ui.button("Обновить", on_click=refresh_ui, icon="refresh").props("flat")
+    ui.button("📊 График", on_click=show_chart_dialog, icon="bar_chart").props("outline")
 
 # Две колонки
 with ui.row().classes("w-full"):
