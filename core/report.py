@@ -15,4 +15,6 @@ def update_report():
 💵 Остаток: {balance:.2f}
 💼 Инвестиции всего: {total_investments:.2f}
 """
-    state.report_label.set_text(report_text)
+    # Проверяем, существует ли UI-элемент
+    if state.report_label is not None:
+        state.report_label.set_text(report_text)

@@ -15,6 +15,28 @@ def update_month_selector():
         else:
             state.month_select.value = None
 
+# ----------------------------------------------------------------------
+# Общая функция удаления месяца (без UI-диалога)
+# ----------------------------------------------------------------------
+
+def delete_month_internal(month):
+    """Удаляет месяц и обновляет состояние. Возвращает True при успехе."""
+    success = delete_month(month)
+    if success:
+        incomes, root_expenses, root_investments, current_month, available_months = load_data()
+        state.incomes, state.root_expenses, state.root_investments, state.current_month, state.available_months = incomes, root_expenses, root_investments, current_month, available_months
+        update_month_selector()
+        refresh_ui()
+        log(f"Месяц {month} удалён", level="INFO")
+        return True
+    else:
+        log(f"Не удалось удалить месяц {month}", level="ERROR")
+        return False
+
+# ----------------------------------------------------------------------
+# Функции работы с месяцами (UI-зависимые)
+# ----------------------------------------------------------------------
+
 @log_call()
 def change_month(month):
     if not month or month == state.current_month:
@@ -43,7 +65,6 @@ def create_new_month():
             # Сохраняем текущий месяц перед созданием нового
             save_data(state.incomes, state.root_expenses, state.root_investments, state.current_month)
             if copy_checkbox.value:
-                # Копируем детей корня расходов
                 new_expenses_dict = {}
                 for child in state.root_expenses.children:
                     new_expenses_dict[child.name] = child.to_dict(for_expense=True)
@@ -60,11 +81,10 @@ def create_new_month():
                     new_root_inv.add_child(child_node)
                 save_data(state.incomes, new_root_exp, new_root_inv, new_month)
             else:
-                # Пустой месяц
                 new_root_exp = CategoryNode("__ROOT_EXPENSES__")
                 new_root_inv = CategoryNode("__ROOT_INVESTMENTS__")
                 save_data({}, new_root_exp, new_root_inv, new_month)
-            # Обновляем списки и текущий месяц
+            # Обновляем состояние
             state.available_months = sorted(state.available_months + [new_month])
             state.current_month = new_month
             incomes, root_expenses, root_investments, _, _ = load_data(new_month)
@@ -77,7 +97,7 @@ def create_new_month():
         ui.button("Создать", on_click=confirm)
         ui.button("Отмена", on_click=dialog.close)
     dialog.open()
-    
+
 @log_call()
 def delete_current_month():
     if not state.current_month:
@@ -88,14 +108,9 @@ def delete_current_month():
         ui.label("Все данные за этот месяц будут удалены.").classes("text-caption")
         with ui.row():
             def confirm(month=state.current_month):
-                log(f"delete_current_month: вызываем delete_month({month})", level="INFO")
-                success = delete_month(month)
-                log(f"delete_current_month: результат delete_month = {success}", level="INFO")
+                log(f"delete_current_month: удаляем месяц {month}", level="INFO")
+                success = delete_month_internal(month)   # <-- используем общую функцию
                 if success:
-                    incomes, root_expenses, root_investments, current_month, available_months = load_data()
-                    state.incomes, state.root_expenses, state.root_investments, state.current_month, state.available_months = incomes, root_expenses, root_investments, current_month, available_months
-                    update_month_selector()
-                    refresh_ui()
                     ui.notify(f"Месяц {month} удалён", type="positive")
                 else:
                     ui.notify("Не удалось удалить месяц", type="negative")
@@ -112,4 +127,4 @@ def manual_save():
     try:
         ui.notify("Данные сохранены", type="positive")
     except RuntimeError:
-        pass  # Игнорируем ошибку, если контекст уже удалён
+        pass

@@ -48,8 +48,10 @@ def build_investments_tree(container, node, level=0):
         build_investments_tree(container, child, level+1)
 
 def refresh_ui():
-    state.expenses_container.clear()
-    state.investments_container.clear()
-    build_expenses_tree(state.expenses_container, state.root_expenses)
-    build_investments_tree(state.investments_container, state.root_investments)
+    if state.expenses_container is not None:
+        state.expenses_container.clear()
+        build_expenses_tree(state.expenses_container, state.root_expenses)
+    if state.investments_container is not None:
+        state.investments_container.clear()
+        build_investments_tree(state.investments_container, state.root_investments)
     update_report()
