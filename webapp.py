@@ -469,17 +469,13 @@ def init_data():
 
 
 # Функции для графиков
-def get_all_leaf_categories(node, parent_path=""):
-    log(f"get_all_leaf_categories: node={node.name if node else 'None'}, parent_path={parent_path}, children={len(node.children) if node else 0}", level="DEBUG")
-    """Возвращает список путей всех листовых категорий (без детей)"""
+def get_all_categories(node, parent_path=""):
+    """Возвращает список путей всех категорий (включая родительские)"""
     paths = []
     for child in node.children:
         current_path = f"{parent_path}/{child.name}" if parent_path else child.name
-        if not child.children:
-            log(f"get_all_leaf_categories: добавляем листовую категорию: {current_path}", level="DEBUG")
-            paths.append(current_path)
-        else:
-            paths.extend(get_all_leaf_categories(child, current_path))
+        paths.append(current_path)
+        paths.extend(get_all_categories(child, current_path))
     return paths
 
 def build_chart(chart_type, data_source, chart_container):
@@ -570,18 +566,6 @@ def build_chart(chart_type, data_source, chart_container):
     else:
         ui.notify(f"Комбинация {chart_type.value} + {data_source.value} не реализована", type="warning")
 
-def init_categories(data_source, category_select):
-    log(f"init_categories: data_source.value={data_source.value}, category_select={category_select}", level="DEBUG")
-    cats = []
-    if data_source.value == "Расходы":
-        cats = get_all_leaf_categories(root_expenses)
-    else:
-        cats = get_all_leaf_categories(root_investments)
-    log(f"init_categories: найдено категорий: {len(cats)}, первые 5: {cats[:5]}", level="DEBUG")
-    log(f"init_categories: устанавливаем options = {cats}", level="DEBUG")
-    category_select.options = cats
-    category_select.value = cats  
-
 # Вспомогательные функции для гибких графиков 
 
 def prepare_expense_data_for_month(month_data, category_node, data_type='actual'):
@@ -671,9 +655,9 @@ with tab_panels:
             # Функция обновления списка автодополнения и выбранных категорий
             def update_category_input_autocomplete():
                 if data_source.value == "Расходы":
-                    cats = get_all_leaf_categories(root_expenses)
+                    cats = get_all_categories(root_expenses)   # все категории
                 else:
-                    cats = get_all_leaf_categories(root_investments)
+                    cats = get_all_categories(root_investments)
                 category_input.options = cats
             
             def add_selected_category(input_field, container):
@@ -683,9 +667,9 @@ with tab_panels:
                     return
                 # Проверяем, существует ли такая категория
                 if data_source.value == "Расходы":
-                    all_cats = get_all_leaf_categories(root_expenses)
+                    all_cats = get_all_categories(root_expenses)
                 else:
-                    all_cats = get_all_leaf_categories(root_investments)
+                    all_cats = get_all_categories(root_investments)
                 if text not in all_cats:
                     ui.notify(f"Категория '{text}' не найдена", type="warning")
                     return
