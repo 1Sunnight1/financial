@@ -21,6 +21,7 @@ expenses_container = None
 investments_container = None
 report_label = None
 month_select = None
+selected_categories = [] ## Глобальный список выбранных категорий
 
 # Функции для получения путей категорий (автодополнение)
 
@@ -481,14 +482,11 @@ def get_all_leaf_categories(node, parent_path=""):
             paths.extend(get_all_leaf_categories(child, current_path))
     return paths
 
-def build_chart(chart_type, data_source, category_select, chart_container):
-    log(f"build_chart: chart_type={chart_type.value}, data_source={data_source.value}, selected={category_select.value}", level="DEBUG")
-    """Строит график на основе выбранных параметров"""
-    selected = category_select.value
+def build_chart(chart_type, data_source, chart_container):
+    selected = selected_categories
     if not selected:
         ui.notify("Выберите хотя бы одну категорию", type="warning")
         return
-
     if chart_type.value == "Столбчатая" and data_source.value == "Расходы":
         forecasts = []
         actuals = []
@@ -511,7 +509,6 @@ def build_chart(chart_type, data_source, category_select, chart_container):
         chart_container.clear()
         with chart_container:
             ui.plotly(fig).classes("w-full h-96")
-
     elif chart_type.value == "Круговая" and data_source.value == "Инвестиции":
         amounts = []
         for cat_path in selected:
@@ -525,7 +522,6 @@ def build_chart(chart_type, data_source, category_select, chart_container):
         chart_container.clear()
         with chart_container:
             ui.plotly(fig).classes("w-full h-96")
-
     elif chart_type.value == "Линейный" and data_source.value == "Инвестиции":
         if len(selected) != 1:
             ui.notify("Для линейного графика выберите ровно одну категорию", type="warning")
@@ -576,7 +572,7 @@ def build_chart(chart_type, data_source, category_select, chart_container):
 
 def init_categories(data_source, category_select):
     log(f"init_categories: data_source.value={data_source.value}, category_select={category_select}", level="DEBUG")
-    cats = []  # инициализация
+    cats = []
     if data_source.value == "Расходы":
         cats = get_all_leaf_categories(root_expenses)
     else:
@@ -584,7 +580,7 @@ def init_categories(data_source, category_select):
     log(f"init_categories: найдено категорий: {len(cats)}, первые 5: {cats[:5]}", level="DEBUG")
     log(f"init_categories: устанавливаем options = {cats}", level="DEBUG")
     category_select.options = cats
-    category_select.value = []
+    category_select.value = cats  
 
 # Вспомогательные функции для гибких графиков 
 
@@ -650,18 +646,84 @@ with tab_panels:
     with ui.tab_panel('Графики'):
         ui.label("📊 Гибкие графики").classes("text-h6 q-pa-md")
         
-        ### Панель управления
+        # Панель управления
         with ui.card().classes("w-full"):
             chart_type = ui.select(["Столбчатая", "Круговая", "Линейный"], value="Столбчатая", label="Тип графика")
             data_source = ui.select(["Расходы", "Инвестиции"], value="Расходы", label="Источник данных")
-            category_select = ui.select([], label="Категории (можно выбрать несколько)", multiple=True, value=[])
-            ui.button("Построить график", on_click=lambda: build_chart(chart_type, data_source, category_select, chart_container), icon="show_chart")
-            init_categories(data_source, category_select)        
-
-        ### Контейнер для графика
+            
+            ui.label("Выберите категории (введите название и нажмите «Добавить»):").classes("text-subtitle2 q-mt-md")
+            
+            # Поле ввода с автодополнением
+            category_input = ui.input(
+                placeholder="Начните вводить название категории...",
+                autocomplete=[]
+            ).classes("w-full")
+            
+            # Контейнер для выбранных категорий (чипы)
+            selected_container = ui.row().classes("q-mt-sm wrap")
+            
+            # Кнопки управления
+            with ui.row().classes("q-mt-sm"):
+                ui.button("➕ Добавить категорию", on_click=lambda: add_selected_category(category_input, selected_container), icon="add")
+                ui.button("🗑️ Очистить все", on_click=lambda: clear_selected_categories(selected_container), icon="delete")
+                ui.button("Построить график", on_click=lambda: build_chart(chart_type, data_source, chart_container), icon="show_chart")
+            
+            # Функция обновления списка автодополнения и выбранных категорий
+            def update_category_input_autocomplete():
+                if data_source.value == "Расходы":
+                    cats = get_all_leaf_categories(root_expenses)
+                else:
+                    cats = get_all_leaf_categories(root_investments)
+                category_input.options = cats
+            
+            def add_selected_category(input_field, container):
+                text = input_field.value.strip()
+                if not text:
+                    ui.notify("Введите название категории", type="warning")
+                    return
+                # Проверяем, существует ли такая категория
+                if data_source.value == "Расходы":
+                    all_cats = get_all_leaf_categories(root_expenses)
+                else:
+                    all_cats = get_all_leaf_categories(root_investments)
+                if text not in all_cats:
+                    ui.notify(f"Категория '{text}' не найдена", type="warning")
+                    return
+                if text in selected_categories:
+                    ui.notify(f"Категория '{text}' уже выбрана", type="warning")
+                    return
+                selected_categories.append(text)
+                # Добавляем чип
+                with container:
+                    chip = ui.chip(text, removable=True)
+                    chip.on('remove', lambda e, cat=text: remove_selected_category(cat, chip, container))
+                input_field.value = ''
+                ui.notify(f"Добавлена категория: {text}", type="positive")
+                log(f"Добавлена категория для графика: {text}", level="DEBUG")
+            
+            def remove_selected_category(cat, chip, container):
+                if cat in selected_categories:
+                    selected_categories.remove(cat)
+                chip.delete()
+                ui.notify(f"Удалена категория: {cat}", type="info")
+                log(f"Удалена категория из графика: {cat}", level="DEBUG")
+            
+            def clear_selected_categories(container):
+                global selected_categories
+                selected_categories.clear()
+                container.clear()
+                ui.notify("Все категории удалены", type="info")
+                log("Очищен список категорий для графика", level="DEBUG")
+            
+            # Обновляем автодополнение при смене источника данных
+            data_source.on('change', lambda: update_category_input_autocomplete())
+            # Инициализация при загрузке
+            update_category_input_autocomplete()
+        
+        # Контейнер для графика
         chart_container = ui.column().classes("w-full")
         ui.separator()
-        ui.label("Подсказка: для круговой диаграммы выберите 'Инвестиции', для линейного графика — 'Инвестиции' и одну категорию.")
+        ui.label("Подсказка: для круговой диаграммы выберите 'Инвестиции', для линейного графика — 'Инвестиции' и одну категорию.")    
     
     with ui.tab_panel('Настройки'):
         ui.label("⚙️ Настройки приложения").classes("text-h6 q-pa-md")
