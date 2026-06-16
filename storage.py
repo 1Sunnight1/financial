@@ -133,29 +133,28 @@ def load_data(month=None):
 
 def delete_month(month):
     """Удаляет указанный месяц из файла данных"""
-    log(f"delete_month: пытаемся удалить месяц {month}", level="DEBUG")
+    log(f"delete_month: пытаемся удалить месяц {month}", level="INFO")
     if not os.path.exists(DATA_FILE):
-        log("delete_month: файл данных не существует", level="DEBUG")
+        log("delete_month: файл данных не существует", level="INFO")
         return False
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         months = list(data.get("months", {}).keys())
-        log(f"delete_month: загружены месяцы: {months}", level="DEBUG")
+        log(f"delete_month: загружены месяцы: {months}", level="INFO")
         if "months" in data and month in data["months"]:
             del data["months"][month]
-            log(f"delete_month: месяц {month} удалён из словаря", level="DEBUG")
-            # Если удалён текущий месяц, устанавливаем текущим первый доступный или None
+            log(f"delete_month: месяц {month} удалён из словаря", level="INFO")
             if data.get("current_month") == month:
                 new_months = sorted(data["months"].keys())
                 data["current_month"] = new_months[0] if new_months else None
-                log(f"delete_month: новый current_month = {data['current_month']}", level="DEBUG")
+                log(f"delete_month: новый current_month = {data['current_month']}", level="INFO")
             with open(DATA_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            log("delete_month: файл перезаписан", level="DEBUG")
+            log("delete_month: файл перезаписан", level="INFO")
             return True
         else:
-            log(f"delete_month: месяц {month} не найден в months", level="DEBUG")
+            log(f"delete_month: месяц {month} не найден в months", level="INFO")
     except Exception as e:
         log(f"delete_month: ошибка: {e}", level="ERROR")
     return False
