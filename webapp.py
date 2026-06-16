@@ -1,7 +1,6 @@
 # webapp.py
 from nicegui import ui, app
 import matplotlib.pyplot as plt
-from nicegui import ui, app
 from storage import load_data, save_data, delete_month, DATA_FILE
 from models import CategoryNode
 import plotly.graph_objects as go
@@ -10,19 +9,20 @@ from datetime import datetime
 from operations import add_daily_expense, add_expense_category, add_investment_category, set_actual_expense
 from logger import set_logging_enabled, log, LOGGING_ENABLED
 import traceback
+from logger import log, log_call
 
-# ---------- Глобальное состояние ----------
-incomes = {}   # словарь { "YYYY-MM-DD": сумма }
+# Глобальные переменные и контейнеры
+incomes = {}
 root_expenses = None
 root_investments = None
 current_month = None
 available_months = []
-
-# Контейнеры
 expenses_container = None
 investments_container = None
 report_label = None
 month_select = None
+
+# Функции для получения путей категорий (автодополнение)
 
 def get_all_expense_paths():
     """Возвращает список всех путей категорий расходов (например, ['Еда', 'Еда/Мясо', 'Транспорт'])"""
@@ -35,7 +35,17 @@ def get_all_expense_paths():
     walk(root_expenses, [])
     return sorted(paths)
 
-# ---------- Вспомогательные функции для гибких графиков ----------
+def get_all_investment_paths():
+    """Аналогично для инвестиций"""
+    paths = []
+    def walk(node, current):
+        for child in node.children:
+            new_path = current + [child.name]
+            paths.append('/'.join(new_path))
+            walk(child, new_path)
+    walk(root_investments, [])
+    return sorted(paths)
+
 def get_flat_categories(node, current_path=''):
     """Рекурсивно собирает все категории (листовые и родительские) с их полными путями"""
     categories = []
@@ -55,26 +65,8 @@ def get_category_by_path(root_node, path):
             return None
     return node
 
-def prepare_expense_data_for_month(month_data, category_node, data_type='actual'):
-    """
-    Для заданного узла категории и месяца возвращает сумму прогноза или факта.
-    month_data - данные за месяц (словарь из load_data, но мы будем загружать нужные месяцы по мере необходимости)
-    """
-    # Эта функция будет использоваться для линейных графиков по месяцам
-    pass  # пока заглушка, реализуем позже
+# Функции построения деревьев и обновления UI
 
-def get_all_investment_paths():
-    """Аналогично для инвестиций"""
-    paths = []
-    def walk(node, current):
-        for child in node.children:
-            new_path = current + [child.name]
-            paths.append('/'.join(new_path))
-            walk(child, new_path)
-    walk(root_investments, [])
-    return sorted(paths)
-
-# ---------- Вспомогательные функции ----------
 def refresh_ui():
     """Полностью перестраивает деревья и отчёт"""
     expenses_container.clear()
@@ -119,7 +111,9 @@ def build_investments_tree(container, node, level=0):
             label.on('click', lambda e, n=child: show_quick_edit_dialog(n, is_expense=False))
         build_investments_tree(container, child, level+1)
 
-# ---------- Диалоги редактирования ----------
+# Диалоги редактирования и удаления
+
+@log_call()
 def edit_forecast_dialog(category):
     with ui.dialog() as dialog, ui.card():
         ui.label(f"Редактировать прогноз: {category.name}")
@@ -134,6 +128,7 @@ def edit_forecast_dialog(category):
         ui.button("Отмена", on_click=dialog.close)
     dialog.open()
 
+@log_call()
 def edit_actual_dialog(category):
     with ui.dialog() as dialog, ui.card():
         ui.label(f"Редактировать факт: {category.name}")
@@ -148,6 +143,7 @@ def edit_actual_dialog(category):
         ui.button("Отмена", on_click=dialog.close)
     dialog.open()
 
+@log_call()
 def edit_investment_amount_dialog(category):
     with ui.dialog() as dialog, ui.card():
         ui.label(f"Редактировать инвестицию: {category.name}")
@@ -162,6 +158,7 @@ def edit_investment_amount_dialog(category):
         ui.button("Отмена", on_click=dialog.close)
     dialog.open()
 
+@log_call()
 def confirm_delete_category(category, is_expense=True):
     with ui.dialog() as dialog, ui.card():
         ui.label(f"Удалить категорию '{category.name}'?")
@@ -212,8 +209,10 @@ def show_quick_edit_dialog(category, is_expense=True):
             ui.button("Сохранить", on_click=save)
         ui.button("Закрыть", on_click=dialog.close)
     dialog.open()
-    
-# ---------- Диалоги добавления (улучшенные) ----------
+
+#Диалоги добавления
+
+@log_call()
 def show_add_expense_dialog():
     with ui.dialog() as dialog, ui.card():
         ui.label("➕ Добавить категорию расходов")
@@ -236,6 +235,7 @@ def show_add_expense_dialog():
             ui.button("Отмена", on_click=dialog.close, icon="close")
     dialog.open()
 
+@log_call()
 def show_add_investment_dialog():
     with ui.dialog() as dialog, ui.card():
         ui.label("➕ Добавить инвестицию")
@@ -257,6 +257,7 @@ def show_add_investment_dialog():
         ui.button("Отмена", on_click=dialog.close, icon="close")
     dialog.open()
 
+@log_call()
 def show_set_actual_dialog():
     with ui.dialog() as dialog, ui.card():
         ui.label("📝 Записать фактический расход")
@@ -284,7 +285,9 @@ def show_set_actual_dialog():
         ui.button("Отмена", on_click=dialog.close, icon="close")
     dialog.open()
 
-# ---------- Диалоги для доходов ----------
+# Диалоги для доходов
+
+@log_call()
 def show_add_incomes_dialog():
     with ui.dialog() as dialog, ui.card():
         ui.label("💰 Добавить доход")
@@ -323,6 +326,7 @@ def show_incomes_dialog():
         ui.button("Закрыть", on_click=dialog.close)
     dialog.open()
 
+@log_call()
 def delete_incomes_transaction(date_str, dialog):
     global incomes
     if date_str in incomes:
@@ -332,69 +336,7 @@ def delete_incomes_transaction(date_str, dialog):
         dialog.close()
         ui.notify(f"Доход за {date_str} удалён", type="positive")
 
-# ---------- График ----------
-def show_chart_dialog():
-    """Показывает интерактивный график сравнения прогноза и факта по расходам"""
-    # Собираем данные по прямым детям root_expenses
-    categories = []
-    forecasts = []
-    actuals = []
-    for child in root_expenses.children:
-        categories.append(child.name)
-        forecasts.append(child.total_forecast())
-        actuals.append(child.total_actual())
-    if not categories:
-        ui.notify("Нет категорий расходов для отображения графика", type="warning")
-        return
-
-    # Создаём фигуру Plotly
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=categories, y=forecasts, name='Прогноз', marker_color='skyblue'))
-    fig.add_trace(go.Bar(x=categories, y=actuals, name='Факт', marker_color='lightcoral'))
-
-    fig.update_layout(
-        title='Сравнение прогноза и факта по категориям расходов',
-        xaxis_title='Категории',
-        yaxis_title='Сумма',
-        barmode='group',
-        template='plotly_white',
-        height=500
-    )
-
-    # Показываем в диалоге
-    with ui.dialog() as dialog, ui.card().style("width: 900px"):
-        ui.label("📊 График расходов").classes("text-h6")
-        ui.plotly(fig).classes("w-full")
-        ui.button("Закрыть", on_click=dialog.close)
-    dialog.open()
-
-def update_report():
-    total_incomes = sum(incomes.values())
-    total_forecast = root_expenses.total_forecast()
-    total_actual = root_expenses.total_actual()
-    balance = total_incomes - total_actual
-    total_investments = root_investments.total_amount()
-    report_text = f"""
-💰 Доходы: {total_incomes:.2f}
-📊 Прогноз расходов: {total_forecast:.2f}
-📉 Факт расходов: {total_actual:.2f}
-📈 Отклонение: {total_forecast - total_actual:+.2f}
-💵 Остаток: {balance:.2f}
-💼 Инвестиции всего: {total_investments:.2f}
-"""
-    report_label.set_text(report_text)
-
-def manual_save():
-    total_incomes = sum(incomes.values())
-    log(f"manual_save: month={current_month}, total_incomes={total_incomes}, forecast={root_expenses.total_forecast()}, actual={root_expenses.total_actual()}", level="INFO")
-    save_data(incomes, root_expenses, root_investments, current_month)
-    ui.notify("Данные сохранены", type="positive")
-
-def init_data():
-    global incomes, root_expenses, root_investments, current_month, available_months
-    incomes, root_expenses, root_investments, current_month, available_months = load_data()
-    update_month_selector()
-    refresh_ui()
+# Функции работы с месяцами
 
 def update_month_selector():
     """Обновляет значения в выпадающем списке месяцев"""
@@ -406,6 +348,7 @@ def update_month_selector():
         else:
             month_select.value = None
 
+@log_call()
 def change_month(month):
     global incomes, root_expenses, root_investments, current_month
     if not month or month == current_month:
@@ -416,6 +359,7 @@ def change_month(month):
     manual_save()
     ui.notify(f"Загружен месяц {month}", type="info")
 
+@log_call()
 def create_new_month():
     with ui.dialog() as dialog, ui.card():
         ui.label("Новый месяц")
@@ -464,7 +408,7 @@ def create_new_month():
         ui.button("Отмена", on_click=dialog.close)
     dialog.open()
 
-#удаление месяцев
+@log_call()
 def delete_current_month():
     global incomes, root_expenses, root_investments, current_month, available_months
     if not current_month:
@@ -489,33 +433,196 @@ def delete_current_month():
             ui.button("Отмена", on_click=dialog.close)
     dialog.open()
 
-# ---------- Интерфейс ----------
+# Функции отчёта и сохранения
+
+def update_report():
+    total_incomes = sum(incomes.values())
+    total_forecast = root_expenses.total_forecast()
+    total_actual = root_expenses.total_actual()
+    balance = total_incomes - total_actual
+    total_investments = root_investments.total_amount()
+    report_text = f"""
+💰 Доходы: {total_incomes:.2f}
+📊 Прогноз расходов: {total_forecast:.2f}
+📉 Факт расходов: {total_actual:.2f}
+📈 Отклонение: {total_forecast - total_actual:+.2f}
+💵 Остаток: {balance:.2f}
+💼 Инвестиции всего: {total_investments:.2f}
+"""
+    report_label.set_text(report_text)
+
+@log_call()
+def manual_save():
+    total_incomes = sum(incomes.values())
+    log(f"manual_save: month={current_month}, total_incomes={total_incomes}, forecast={root_expenses.total_forecast()}, actual={root_expenses.total_actual()}", level="INFO")
+    save_data(incomes, root_expenses, root_investments, current_month)
+    ui.notify("Данные сохранены", type="positive")
+
+@log_call()
+def init_data():
+    global incomes, root_expenses, root_investments, current_month, available_months
+    incomes, root_expenses, root_investments, current_month, available_months = load_data()
+    log(f"init_data: загружено {len(root_expenses.children)} категорий расходов, {len(root_investments.children)} категорий инвестиций", level="DEBUG")
+    update_month_selector()
+    refresh_ui()
+
+
+# Функции для графиков
+def get_all_leaf_categories(node, parent_path=""):
+    log(f"get_all_leaf_categories: node={node.name if node else 'None'}, parent_path={parent_path}, children={len(node.children) if node else 0}", level="DEBUG")
+    """Возвращает список путей всех листовых категорий (без детей)"""
+    paths = []
+    for child in node.children:
+        current_path = f"{parent_path}/{child.name}" if parent_path else child.name
+        if not child.children:
+            log(f"get_all_leaf_categories: добавляем листовую категорию: {current_path}", level="DEBUG")
+            paths.append(current_path)
+        else:
+            paths.extend(get_all_leaf_categories(child, current_path))
+    return paths
+
+def build_chart(chart_type, data_source, category_select, chart_container):
+    log(f"build_chart: chart_type={chart_type.value}, data_source={data_source.value}, selected={category_select.value}", level="DEBUG")
+    """Строит график на основе выбранных параметров"""
+    selected = category_select.value
+    if not selected:
+        ui.notify("Выберите хотя бы одну категорию", type="warning")
+        return
+
+    if chart_type.value == "Столбчатая" and data_source.value == "Расходы":
+        forecasts = []
+        actuals = []
+        for cat_path in selected:
+            parts = cat_path.split('/')
+            node = root_expenses
+            for part in parts:
+                node = node.find_child(part) if node else None
+            if node:
+                forecasts.append(node.total_forecast())
+                actuals.append(node.total_actual())
+            else:
+                forecasts.append(0)
+                actuals.append(0)
+        fig = go.Figure()
+        fig.add_trace(go.Bar(x=selected, y=forecasts, name='Прогноз', marker_color='skyblue'))
+        fig.add_trace(go.Bar(x=selected, y=actuals, name='Факт', marker_color='lightcoral'))
+        fig.update_layout(barmode='group', title="Сравнение прогноза и факта")
+        log(f"build_chart: строим график для выбранных категорий: {selected}", level="DEBUG")
+        chart_container.clear()
+        with chart_container:
+            ui.plotly(fig).classes("w-full h-96")
+
+    elif chart_type.value == "Круговая" and data_source.value == "Инвестиции":
+        amounts = []
+        for cat_path in selected:
+            parts = cat_path.split('/')
+            node = root_investments
+            for part in parts:
+                node = node.find_child(part) if node else None
+            amounts.append(node.total_amount() if node else 0)
+        fig = go.Figure(data=[go.Pie(labels=selected, values=amounts, hole=.3)])
+        fig.update_layout(title="Распределение инвестиций")
+        chart_container.clear()
+        with chart_container:
+            ui.plotly(fig).classes("w-full h-96")
+
+    elif chart_type.value == "Линейный" and data_source.value == "Инвестиции":
+        if len(selected) != 1:
+            ui.notify("Для линейного графика выберите ровно одну категорию", type="warning")
+            return
+        category_path = selected[0]
+        parts = category_path.split('/')
+        import json, os
+        months = []
+        amounts = []
+        if os.path.exists(DATA_FILE):
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            for month in sorted(data.get("months", {}).keys()):
+                month_data = data["months"][month]
+                inv_data = month_data.get("investments", {})
+                def find_in_dict(d, parts):
+                    if not parts:
+                        return None
+                    part = parts[0]
+                    if part in d:
+                        if len(parts) == 1:
+                            return d[part]
+                        else:
+                            return find_in_dict(d[part].get("children", {}), parts[1:])
+                    return None
+                found = find_in_dict(inv_data, parts)
+                if found and "amount" in found:
+                    amount = found["amount"]
+                elif found and "children" in found:
+                    def sum_children(node_dict):
+                        s = node_dict.get("amount", 0)
+                        for child in node_dict.get("children", {}).values():
+                            s += sum_children(child)
+                        return s
+                    amount = sum_children(found)
+                else:
+                    amount = 0
+                months.append(month)
+                amounts.append(amount)
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=months, y=amounts, mode='lines+markers', name=category_path))
+        fig.update_layout(title=f"Динамика инвестиций: {category_path}")
+        chart_container.clear()
+        with chart_container:
+            ui.plotly(fig).classes("w-full h-96")
+    else:
+        ui.notify(f"Комбинация {chart_type.value} + {data_source.value} не реализована", type="warning")
+
+def init_categories(data_source, category_select):
+    log(f"init_categories: data_source.value={data_source.value}, category_select={category_select}", level="DEBUG")
+    cats = []  # инициализация
+    if data_source.value == "Расходы":
+        cats = get_all_leaf_categories(root_expenses)
+    else:
+        cats = get_all_leaf_categories(root_investments)
+    log(f"init_categories: найдено категорий: {len(cats)}, первые 5: {cats[:5]}", level="DEBUG")
+    log(f"init_categories: устанавливаем options = {cats}", level="DEBUG")
+    category_select.options = cats
+    category_select.value = []
+
+# Вспомогательные функции для гибких графиков 
+
+def prepare_expense_data_for_month(month_data, category_node, data_type='actual'):
+    """
+    Для заданного узла категории и месяца возвращает сумму прогноза или факта.
+    month_data - данные за месяц (словарь из load_data, но мы будем загружать нужные месяцы по мере необходимости)
+    """
+    # Эта функция будет использоваться для линейных графиков по месяцам
+    pass  # пока заглушка, реализуем позже
+
+# Интерфейс 
 ui.page_title("Финансовый помощник")
 
 with ui.header(elevated=True).classes("bg-primary text-white"):
     ui.label("💰 Финансовый помощник").classes("text-h4")
 
-# Горизонтальные вкладки
+## Горизонтальные вкладки
 tabs = ui.tabs().classes('w-full')
 with tabs:
     ui.tab('Главная', icon='home')
     ui.tab('Графики', icon='bar_chart')
     ui.tab('Настройки', icon='settings')
 
-# Панели вкладок
+## Панели вкладок
 tab_panels = ui.tab_panels(tabs, value='Главная').classes('w-full')
 
-# ----- Вкладка "Главная" -----
+## Вкладки
 with tab_panels:
     with ui.tab_panel('Главная'):
-        # Строка выбора месяца
+        ### Строка выбора месяца
         with ui.row().classes("w-full items-center gap-2 p-2"):
             ui.label("Месяц:").classes("text-subtitle1")
             month_select = ui.select(available_months, value=current_month, on_change=lambda e: change_month(e.value))
             ui.button("➕ Новый месяц", on_click=create_new_month, icon="add").props("outline")
             ui.button("🗑️ Удалить месяц", on_click=delete_current_month, icon="delete").props("outline").props("color=negative")
 
-        # Панель кнопок действий
+        ### Панель кнопок действий
         with ui.row().classes("w-full items-center gap-2 p-2"):
             ui.button("➕ Добавить доход", on_click=show_add_incomes_dialog, icon="add").props("outline")
             ui.button("📋 Доходы", on_click=show_incomes_dialog, icon="list").props("outline")
@@ -525,7 +632,7 @@ with tab_panels:
             ui.button("Обновить", on_click=refresh_ui, icon="refresh").props("flat")
             ui.button("💾 Сохранить", on_click=manual_save, icon="save").props("outline")
 
-        # Две колонки: расходы и инвестиции
+        ### Две колонки: расходы и инвестиции
         with ui.row().classes("w-full"):
             with ui.column().classes("w-1/2 q-pa-md"):
                 ui.label("📋 Расходы").classes("text-h6")
@@ -534,142 +641,27 @@ with tab_panels:
                 ui.label("📈 Инвестиции").classes("text-h6")
                 investments_container = ui.column().classes("q-ml-md")
 
-        # Отчёт
+        ### Отчёт
         report_label = ui.label().classes("text-subtitle1 q-pa-md")
 
-        # Инициализация данных (вызывается один раз)
+        ### Инициализация данных (вызывается один раз)
         init_data()
-
-# ---------- Вспомогательные функции для гибких графиков ----------
-    def get_all_leaf_categories(node, parent_path=""):
-        """Возвращает список путей всех листовых категорий (без детей)"""
-        paths = []
-        for child in node.children:
-            current_path = f"{parent_path}/{child.name}" if parent_path else child.name
-            if not child.children:
-                paths.append(current_path)
-            else:
-                paths.extend(get_all_leaf_categories(child, current_path))
-        return paths
-
-    def build_chart(chart_type, data_source, category_select, chart_container):
-        """Строит график на основе выбранных параметров"""
-        selected = category_select.value
-        if not selected:
-            ui.notify("Выберите хотя бы одну категорию", type="warning")
-            return
-
-        if chart_type.value == "Столбчатая" and data_source.value == "Расходы":
-            forecasts = []
-            actuals = []
-            for cat_path in selected:
-                parts = cat_path.split('/')
-                node = root_expenses
-                for part in parts:
-                    node = node.find_child(part) if node else None
-                if node:
-                    forecasts.append(node.total_forecast())
-                    actuals.append(node.total_actual())
-                else:
-                    forecasts.append(0)
-                    actuals.append(0)
-            fig = go.Figure()
-            fig.add_trace(go.Bar(x=selected, y=forecasts, name='Прогноз', marker_color='skyblue'))
-            fig.add_trace(go.Bar(x=selected, y=actuals, name='Факт', marker_color='lightcoral'))
-            fig.update_layout(barmode='group', title="Сравнение прогноза и факта")
-            chart_container.clear()
-            with chart_container:
-                ui.plotly(fig).classes("w-full h-96")
-
-        elif chart_type.value == "Круговая" and data_source.value == "Инвестиции":
-            amounts = []
-            for cat_path in selected:
-                parts = cat_path.split('/')
-                node = root_investments
-                for part in parts:
-                    node = node.find_child(part) if node else None
-                amounts.append(node.total_amount() if node else 0)
-            fig = go.Figure(data=[go.Pie(labels=selected, values=amounts, hole=.3)])
-            fig.update_layout(title="Распределение инвестиций")
-            chart_container.clear()
-            with chart_container:
-                ui.plotly(fig).classes("w-full h-96")
-
-        elif chart_type.value == "Линейный" and data_source.value == "Инвестиции":
-            if len(selected) != 1:
-                ui.notify("Для линейного графика выберите ровно одну категорию", type="warning")
-                return
-            category_path = selected[0]
-            parts = category_path.split('/')
-            from storage import DATA_FILE
-            import json, os
-            months = []
-            amounts = []
-            if os.path.exists(DATA_FILE):
-                with open(DATA_FILE, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                for month in sorted(data.get("months", {}).keys()):
-                    month_data = data["months"][month]
-                    inv_data = month_data.get("investments", {})
-                    def find_in_dict(d, parts):
-                        if not parts:
-                            return None
-                        part = parts[0]
-                        if part in d:
-                            if len(parts) == 1:
-                                return d[part]
-                            else:
-                                return find_in_dict(d[part].get("children", {}), parts[1:])
-                        return None
-                    found = find_in_dict(inv_data, parts)
-                    if found and "amount" in found:
-                        amount = found["amount"]
-                    elif found and "children" in found:
-                        def sum_children(node_dict):
-                            s = node_dict.get("amount", 0)
-                            for child in node_dict.get("children", {}).values():
-                                s += sum_children(child)
-                            return s
-                        amount = sum_children(found)
-                    else:
-                        amount = 0
-                    months.append(month)
-                    amounts.append(amount)
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=months, y=amounts, mode='lines+markers', name=category_path))
-            fig.update_layout(title=f"Динамика инвестиций: {category_path}")
-            chart_container.clear()
-            with chart_container:
-                ui.plotly(fig).classes("w-full h-96")
-        else:
-            ui.notify(f"Комбинация {chart_type.value} + {data_source.value} не реализована", type="warning")
         
-# ---------- Вкладка "Графики" (исправленная) ----------
     with ui.tab_panel('Графики'):
         ui.label("📊 Гибкие графики").classes("text-h6 q-pa-md")
         
-        # Панель управления
+        ### Панель управления
         with ui.card().classes("w-full"):
             chart_type = ui.select(["Столбчатая", "Круговая", "Линейный"], value="Столбчатая", label="Тип графика")
             data_source = ui.select(["Расходы", "Инвестиции"], value="Расходы", label="Источник данных")
             category_select = ui.select([], label="Категории (можно выбрать несколько)", multiple=True, value=[])
             ui.button("Построить график", on_click=lambda: build_chart(chart_type, data_source, category_select, chart_container), icon="show_chart")
-        
-        # Контейнер для графика
+            init_categories(data_source, category_select)        
+
+        ### Контейнер для графика
         chart_container = ui.column().classes("w-full")
         ui.separator()
         ui.label("Подсказка: для круговой диаграммы выберите 'Инвестиции', для линейного графика — 'Инвестиции' и одну категорию.")
-    
-    with ui.tab_panel('Настройки'):        
-        # Заполняем список категорий при загрузке
-        def init_categories():
-            if data_source.value == "Расходы":
-                cats = get_all_leaf_categories(root_expenses)
-            else:
-                cats = get_all_leaf_categories(root_investments)
-            category_select.options = cats
-            category_select.value = []
-        init_categories()
     
     with ui.tab_panel('Настройки'):
         ui.label("⚙️ Настройки приложения").classes("text-h6 q-pa-md")
