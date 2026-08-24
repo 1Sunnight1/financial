@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+ui/__pycache__/
 
 # C extension modules
 *.so
@@ -70,6 +71,6 @@ ipython_config.py
 .pybuilder/
 target/
 
-#рабочие файлы
+# Рабочие файлы приложения (данные и логи)
 data/
 logs/
